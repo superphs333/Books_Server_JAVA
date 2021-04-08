@@ -239,13 +239,55 @@ public class Server{
 
                 /*
                 날짜 전송(해당 날짜가 해당 방에 처음있는경우 -> room_idx+date(날짜까지만)가 유일한 경우)
+                -> 날짜정보(sort=notice)를 전달한다
                 */
                 // 날짜
                 SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
                 Date time = new Date();
                 String time1 = format.format(time);
-                // 
-                
+                // 찾는값 있는지 확인
+                Connection conn = null;
+                java.sql.Statement stmt = null;
+                ResultSet rs = null;
+                String url = "jdbc:mysql://localhost/website";
+                try{
+                    conn = DriverManager.getConnection(url, "dingpong98", "41Asui!@");
+
+                    // 쿼리를 날리는 statement
+                    stmt = conn.createStatement();
+                }catch (SQLException e) {e.printStackTrace();}
+                String sql = "SELECT date FROM Chatting WHERE room_idx="+room_idx+" AND left(date,10)=\'"+time1+"\'";
+                System.out.println(sql);
+                try{
+                    rs = stmt.executeQuery(sql);
+                }catch (SQLException e) {e.printStackTrace();}
+                boolean found; // 해당값이 있는지 확인하기 위해 
+                try {
+                    found = rs.next();
+                    if(found){
+                        System.out.println("해당날짜에 채팅 데이터 있음");
+                    }else{
+                        System.out.println("해당날짜에 채팅 데이터 없음");
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    System.out.println("에러!");
+                }finally{
+                    try {
+                        if(conn!=null && !conn.isClosed()){
+                            conn.close();
+                        }
+                        if( stmt != null && !stmt.isClosed()){
+                            stmt.close();
+                        }
+                        if( rs != null && !rs.isClosed()){
+                            rs.close();
+                        }
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                } // end finally
+
 
 
             } catch (IOException e) {
