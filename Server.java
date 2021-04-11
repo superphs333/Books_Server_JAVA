@@ -237,56 +237,8 @@ public class Server{
                 해당방에 있는 사용자들에게만 접속 메세지 전달하기(보류)
                 */
 
-                /*
-                날짜 전송(해당 날짜가 해당 방에 처음있는경우 -> room_idx+date(날짜까지만)가 유일한 경우)
-                -> 날짜정보(sort=notice)를 전달한다
-                */
-                // 날짜
-                SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
-                Date time = new Date();
-                String time1 = format.format(time);
-                // 찾는값 있는지 확인
-                Connection conn = null;
-                java.sql.Statement stmt = null;
-                ResultSet rs = null;
-                String url = "jdbc:mysql://localhost/website";
-                try{
-                    conn = DriverManager.getConnection(url, "dingpong98", "41Asui!@");
 
-                    // 쿼리를 날리는 statement
-                    stmt = conn.createStatement();
-                }catch (SQLException e) {e.printStackTrace();}
-                String sql = "SELECT date FROM Chatting WHERE room_idx="+room_idx+" AND left(date,10)=\'"+time1+"\'";
-                System.out.println(sql);
-                try{
-                    rs = stmt.executeQuery(sql);
-                }catch (SQLException e) {e.printStackTrace();}
-                boolean found; // 해당값이 있는지 확인하기 위해 
-                try {
-                    found = rs.next();
-                    if(found){
-                        System.out.println("해당날짜에 채팅 데이터 있음");
-                    }else{
-                        System.out.println("해당날짜에 채팅 데이터 없음");
-                    }
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                    System.out.println("에러!");
-                }finally{
-                    try {
-                        if(conn!=null && !conn.isClosed()){
-                            conn.close();
-                        }
-                        if( stmt != null && !stmt.isClosed()){
-                            stmt.close();
-                        }
-                        if( rs != null && !rs.isClosed()){
-                            rs.close();
-                        }
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
-                } // end finally
+                
 
 
 
@@ -346,26 +298,42 @@ public class Server{
             (그렇지 않으면 오류 발생)
             */
             boolean run = true;
-
+            String day_before = "";
+            String day_today = "";
             try{
 
                 while(run){
+                    // 클라이언트에게 메세지를 수신받는다
+                    String str = dis.readUTF();
 
-                    // 날짜
+                    /*
+                    날짜비교
+                    */
+                    SimpleDateFormat format_compare
+                    = new SimpleDateFormat("yyyy-MM-dd");
+                    Date time_compare = new Date();
+                    String compare = format_compare.format(time_compare);
+                    day_today = compare; // 오늘날짜
+
+                    if(!day_today.equals(day_before)){ // 다를때 -> notice-날짜 보냄 + day_before=day_today
+                        Send_day_data(myRoom);
+                        day_before = day_today;
+                    }
+                
+                    
+                    // 날짜(공통적으로 보냄)
                     SimpleDateFormat format
                     = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                     Date time = new Date();
                     String time1 = format.format(time);
 
-                    // 클라이언트에게 메세지를 수신받는다
-                    String str = dis.readUTF();
 
                     if(str.equals("message")){ // 일반 메세지
                         // 수신받은 메세지
                         String content = dis.readUTF();
                         System.out.println(nickname+":"+content);
 
-                        // 데이터베이스 내용 저장 
+                        // 데이터베이스 내용 저장                                                 
                             // String room_idx, String sort, String login_value, String content, String date
                         int idx = insert(myRoom.room_idx,"message",login_value,content,time1);
 
@@ -408,17 +376,77 @@ public class Server{
     메세지를 전달하는 메소드
     */
     public synchronized void sendToClient(String msg, Room room){
+        
         try{
             // 같은 방의 사용자들에게만 메세지를 전달해준다
             for(UserClass user : room.userV){
                 user.dos.writeUTF(msg);
                 user.dos.flush();
             }
+            
         }catch(Exception e){
             e.printStackTrace();
             System.out.println("in sendToClient"+e.getMessage());
         }
     } // end sendToClient
+
+
+    /*
+    날짜 전송(해당 날짜가 해당 방에 처음있는경우 -> room_idx+date(날짜까지만)가 유일한 경우)
+    -> 날짜정보(sort=notice)를 전달한다
+    */
+    public void Send_day_data(Room myRoom) {
+                        // 날짜
+                        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+                        Date time = new Date();
+                        String time1 = format.format(time);
+                        // 찾는값 있는지 확인
+                        Connection conn = null;
+                        java.sql.Statement stmt = null;
+                        ResultSet rs = null;
+                        String url = "jdbc:mysql://localhost/website";
+                        try{
+                            conn = DriverManager.getConnection(url, "dingpong98", "41Asui!@");
+        
+                            // 쿼리를 날리는 statement
+                            stmt = conn.createStatement();
+                        }catch (SQLException e) {e.printStackTrace();}
+                        String sql = "SELECT date FROM Chatting WHERE room_idx="+myRoom.room_idx+" AND left(date,10)=\'"+time1+"\'";
+                        System.out.println(sql);
+                        try{
+                            rs = stmt.executeQuery(sql);
+                        }catch (SQLException e) {e.printStackTrace();}
+                        boolean found; // 해당값이 있는지 확인하기 위해 
+                        try {
+                            found = rs.next();
+                            if(found){
+                                System.out.println("해당날짜에 채팅 데이터 있음");
+                            }else{
+                                System.out.println("해당날짜에 채팅 데이터 없음");
+                                insert(myRoom.room_idx,"notice",null,time1,time1);
+                
+                                sendToClient("notice§§§§§"+time1+"§"+time1,myRoom);
+                            }
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                            System.out.println("에러!");
+                        }finally{
+                            try {
+                                if(conn!=null && !conn.isClosed()){
+                                    conn.close();
+                                }
+                                if( stmt != null && !stmt.isClosed()){
+                                    stmt.close();
+                                }
+                                if( rs != null && !rs.isClosed()){
+                                    rs.close();
+                                }
+                            } catch (SQLException e) {
+                                e.printStackTrace();
+                            }
+                        } // end finally
+        
+    }
 
     /*
     데이터베이스에 채팅 내용 삽입
