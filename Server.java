@@ -1,6 +1,7 @@
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -305,6 +306,7 @@ public class Server{
                 while(run){
                     // 클라이언트에게 메세지를 수신받는다
                     String str = dis.readUTF();
+                    System.out.println("받은메세지="+str);
 
                     /*
                     날짜비교
@@ -335,10 +337,45 @@ public class Server{
 
                         // 데이터베이스 내용 저장                                                 
                             // String room_idx, String sort, String login_value, String content, String date
-                        int idx = insert(myRoom.room_idx,"message",login_value,content,time1);
+                        int idx = insert(myRoom.room_idx,"message",login_value,content,time1,null);
 
                         // 사용자들에게 메세지를 전달한다
                         sendToClient("message§"+idx+"§"+login_value+"§"+nickname+"§"+profile_url+"§"+content+"§"+time1,myRoom);
+                    }else if(str.equals("file")){ // 파일
+                        // 전송된 파일을 서버에 저장하고, 서버에 저장된 파일의 주소를 리턴해줌
+                        String result = fileWrite();
+                        // 이미지 주소 출력
+                        System.out.println("result : " + result);
+                        result = result.replace("/home/ubuntu/html", "https://my3my3my.tk/");
+                        //System.out.println("result : " + result);
+
+                        // 이미지 주소 클라이언트에게 보내주기
+                        int idx = insert(myRoom.room_idx,"file",login_value,result,time1,null);
+
+                        // 메세지 전달
+                        sendToClient("file§"+idx+"§"+login_value+"§"+nickname+"§"+profile_url+"§"+result+"§"+time1,myRoom);
+                    }else if(str.equals("files")){ // 다중파일
+                        /*
+                        파일 순서를 받는다
+                        */
+                        String order_tag = dis.readUTF();
+
+                        /*
+                        전송 된 파일을 서버에 저장하고, 
+                        서버에 저장 된 파일의 주소를 리턴해준다
+                        */
+                        String result =fileWrite();
+                        // 이미지 주소 변경 및 출력
+                        result = result.replace("/home/ubuntu/html", "https://my3my3my.tk/");
+                        System.out.println("result : " + result);
+
+                        /*
+                        데이터 저장후 이미지 주소를 클라이언트에게 보내주기
+                        */
+                        // 데이터 저장
+                        int idx = insert(myRoom.room_idx,"file",login_value,result,time1,order_tag);
+                        // 메세지 전달
+                        sendToClient("file§"+idx+"§"+login_value+"§"+nickname+"§"+profile_url+"§"+result+"§"+time1+"§"+order_tag,myRoom);
                     }
                     
                 } //end while
@@ -368,6 +405,65 @@ public class Server{
                 
             }
         } // end run()
+
+
+        // 전송된 파일을 쓰고, 서버에 저장하기
+        private String fileWrite(){
+            String result="";
+
+            // 저장장소
+            String file_Path = "/home/ubuntu/html/website/Img_Chatting";
+            try{
+                System.out.println("파일 수신 작업을 시작합니다(파일명->파일크기->파일)");
+                
+                // 파일명을 전송받기
+                String file_Name = dis.readUTF();
+                System.out.println("파일명 " + file_Name + "을 전송받았습니다.");
+
+                // 파일 크기 전송 받기
+                long file_Size = Long.parseLong(dis.readUTF());
+                    // string형태이기 때문에 long으로 변환
+                System.out.println("받은 파일사이즈 =" + file_Size); 
+            
+                // 파일을 생성하고 파일에 대한 출력 스트림을 생성
+                File file = new File(file_Path+"/"+file_Name);
+                fos = new FileOutputStream(file); // 파일 읽기
+                bos = new BufferedOutputStream(fos); // 더 효율적으로 읽기 위해
+
+                // 바이트 데이터를 전송받으면서 기록
+                int readed = 0;
+                byte[] b = new byte[10000];
+                while(true){
+                    readed = dis.read(b);
+                    // 파일에 쓰기
+                    bos.write(b,0,readed);
+                    file_Size-=readed;
+
+                    // 0되면 빠져나오기(-1까지 가면 socket.closed가 됨)
+                    if(file_Size==0){
+                        //System.out.println("fileSize==0");
+                        break;
+                    }
+                } // end while
+                result = "SUCCESS";
+                System.out.println("파일 수신 작업을 완료하였습니다.");
+                
+                // 주소출력
+                result = file.getAbsolutePath();
+
+            
+
+            }catch(IOException e){
+                e.printStackTrace();
+                result = "ERROR";
+                System.out.println("파일받기 에러"+e.getMessage());
+            }finally{
+                try { bos.close(); } catch (IOException e) { e.printStackTrace(); }
+                try { fos.close(); } catch (IOException e) { e.printStackTrace(); }
+            }
+
+            return result;
+        }
 
     } // end UserClass
 
@@ -423,7 +519,7 @@ public class Server{
                                 System.out.println("해당날짜에 채팅 데이터 있음");
                             }else{
                                 System.out.println("해당날짜에 채팅 데이터 없음");
-                                insert(myRoom.room_idx,"notice",null,time1,time1);
+                                insert(myRoom.room_idx,"notice",null,time1,time1,null);
                 
                                 sendToClient("notice§§§§§"+time1+"§"+time1,myRoom);
                             }
@@ -451,7 +547,7 @@ public class Server{
     /*
     데이터베이스에 채팅 내용 삽입
     */
-    private int insert(String room_idx, String sort, String login_value, String content, String date){
+    private int insert(String room_idx, String sort, String login_value, String content, String date, String order_tag){
         Connection conn = null;
         PreparedStatement pstmt = null;
         int idx=0;
@@ -473,7 +569,7 @@ public class Server{
         }
 
         // SQL 쿼리 준비 
-        String sql = "INSERT INTO Chatting(room_idx,sort,login_value,content,date) VALUES(?,?,?,?,?)";
+        String sql = "INSERT INTO Chatting(room_idx,sort,login_value,content,date,order_tag) VALUES(?,?,?,?,?,?)";
         try {
             pstmt = conn.prepareStatement(sql);
         } catch (SQLException e) {
@@ -488,6 +584,7 @@ public class Server{
             pstmt.setString(3, login_value);
             pstmt.setString(4, content);
             pstmt.setString(5, date);
+            pstmt.setString(6, order_tag);
         }catch (SQLException e) {
             e.printStackTrace();
         }
